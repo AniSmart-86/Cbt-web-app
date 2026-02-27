@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student CBT Portal</title>
+
+<style>
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+  font-family:Arial, sans-serif;
+}
+
+body{
+  background:linear-gradient(to right,#e3f2fd,#ffffff);
+  min-height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+}
+
+.container{
+  width:95%;
+  max-width:1000px;
+  background:white;
+  padding:20px;
+  border-radius:12px;
+  box-shadow:0 10px 30px rgba(0,0,0,0.1);
+}
+
+h1,h2,h3{
+  margin-bottom:15px;
+}
+
+input,select,button{
+  width:100%;
+  padding:10px;
+  margin:6px 0;
+  border-radius:6px;
+  border:1px solid #ccc;
+}
+
+button{
+  background:#1E88E5;
+  color:white;
+  border:none;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+button:hover{
+  background:#1565C0;
+}
+
+.hidden{
+  display:none;
+}
+
+.exam-header{
+  display:flex;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  margin-bottom:15px;
+}
+
+.timer{
+  font-weight:bold;
+}
+
+.question-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(35px,1fr));
+  gap:6px;
+  margin:10px 0;
+}
+
+.grid-btn{
+  padding:6px;
+  text-align:center;
+  border-radius:4px;
+  cursor:pointer;
+  background:#eee;
+}
+
+.grid-btn.answered{
+  background:#1E88E5;
+  color:white;
+}
+
+.grid-btn.active{
+  border:2px solid #000;
+}
+
+.option{
+  padding:8px;
+  border:1px solid #ddd;
+  margin:6px 0;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.option.selected{
+  background:#bbdefb;
+  border:2px solid #1E88E5;
+}
+
+.result-box{
+  text-align:center;
+  padding:20px;
+}
+
+.pass{
+  color:green;
+  font-weight:bold;
+}
+
+.fail{
+  color:red;
+  font-weight:bold;
+}
+
+@media(max-width:600px){
+  .exam-header{
+    flex-direction:column;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<!-- LOGIN -->
+<div id="loginPage">
+<h1>Student CBT Portal</h1>
+<input type="text" id="username" placeholder="Enter your name">
+<input type="password" id="password" placeholder="Password">
+<button onclick="login()">Login</button>
+<p id="loginError" style="color:red;"></p>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" class="hidden">
+<h2>Select Your Class</h2>
+<select id="classSelect">
+<option value="">Select Class</option>
+<option value="JSS2">JSS2</option>
+<option value="JSS3">JSS3</option>
+<option value="SSS1">SSS1</option>
+<option value="SSS2">SSS2</option>
+<option value="SSS3">SSS3</option>
+</select>
+<button onclick="startExam()">Start Exam</button>
+</div>
+
+<!-- EXAM -->
+<div id="examPage" class="hidden">
+<div class="exam-header">
+<div>
+<strong id="displayName"></strong><br>
+Class: <span id="displayClass"></span>
+</div>
+<div class="timer">
+Time Left: <span id="time">20:00</span>
+</div>
+</div>
+
+<div>
+Answered: <span id="answeredCount">0</span> |
+Unanswered: <span id="unansweredCount">20</span>
+</div>
+
+<div id="questionText"></div>
+<div id="options"></div>
+
+<div class="question-grid" id="questionGrid"></div>
+
+<button onclick="submitExam()">Submit Exam</button>
+</div>
+
+<!-- RESULT -->
+<div id="resultPage" class="hidden">
+<div class="result-box">
+<h2>Exam Result</h2>
+<p id="finalMessage"></p>
+<p id="scoreText"></p>
+<button onclick="logout()">Back to Start</button>
+</div>
+</div>
+
+</div>
+
+<script>
+let username="";
+let selectedClass="";
+let currentQuestion=0;
+let answers={};
+let timeLeft=1200;
+let timer;
+
+// Harder questions per class
+const questionBank={
+JSS2:[
+{q:"Define MS Word.",o:["Spreadsheet","Word Processor","Browser","OS"],a:1},
+{q:"Excel is mainly used for?",o:["Typing","Calculation","Drawing","Gaming"],a:1},
+{q:"HTML stands for?",o:["Hyper Text Markup Language","Home Tool","High Text","None"],a:0},
+{q:"Programming means?",o:["Giving instructions","Browsing","Typing","Drawing"],a:0},
+{q:"Excel formula begins with?",o:["=","#","@","$"],a:0}
+],
+JSS3:[
+{q:"MS Word ribbon contains?",o:["Tabs","Cells","Codes","Charts"],a:0},
+{q:"SUM function is written as?",o:["=SUM(A1:A5)","SUM(A1:A5)","ADD()","TOTAL()"],a:0},
+{q:"HTML tag for link?",o:["<a>","<p>","<h1>","<img>"],a:0},
+{q:"Algorithm is?",o:["Step by step solution","Virus","File","None"],a:0},
+{q:"CPU means?",o:["Central Processing Unit","Computer Unit","Central Print Unit","None"],a:0}
+],
+SSS1:[
+{q:"Which is not MS Word feature?",o:["Mail Merge","Spreadsheet","Spell Check","Formatting"],a:1},
+{q:"Excel cell reference B2 means?",o:["Row2 ColumnB","Column2 RowB","None","Both"],a:0},
+{q:"HTML document structure starts with?",o:["<!DOCTYPE html>","<head>","<body>","<html> only"],a:0},
+{q:"Programming language example?",o:["Python","Word","Excel","HTML"],a:0},
+{q:"Loop is used to?",o:["Repeat instructions","Delete file","Browse","Compile"],a:0}
+],
+SSS2:[
+{q:"Mail Merge is used for?",o:["Bulk letters","Calculation","Coding","Drawing"],a:0},
+{q:"Excel IF function is used for?",o:["Conditional logic","Loop","Delete","Print"],a:0},
+{q:"HTML semantic tag example?",o:["<section>","<font>","<big>","<center>"],a:0},
+{q:"Compiler translates?",o:["High level to machine code","Machine to human","Virus","None"],a:0},
+{q:"Data type example?",o:["Integer","Loop","Browser","Folder"],a:0}
+],
+SSS3:[
+{q:"Excel VLOOKUP is used to?",o:["Search vertically","Search horizontally","Delete","Print"],a:0},
+{q:"HTML attribute example?",o:["href","loop","sum","int"],a:0},
+{q:"Programming debugging means?",o:["Fixing errors","Compiling","Deleting","Formatting"],a:0},
+{q:"Algorithm must be?",o:["Finite","Infinite","Random","None"],a:0},
+{q:"Spreadsheet intersection forms?",o:["Cell","Row","Column","File"],a:0}
+]
+};
+
+function login(){
+const pass=document.getElementById("password").value;
+username=document.getElementById("username").value;
+
+if(pass==="12345" && username!==""){
+localStorage.setItem("studentName",username);
+showDashboard();
+}else{
+document.getElementById("loginError").innerText="Invalid login";
+}
+}
+
+function showDashboard(){
+document.getElementById("loginPage").classList.add("hidden");
+document.getElementById("dashboard").classList.remove("hidden");
+}
+
+function startExam(){
+selectedClass=document.getElementById("classSelect").value;
+if(!selectedClass){alert("Select class");return;}
+
+localStorage.setItem("selectedClass",selectedClass);
+
+document.getElementById("dashboard").classList.add("hidden");
+document.getElementById("examPage").classList.remove("hidden");
+
+document.getElementById("displayName").innerText="Student: "+localStorage.getItem("studentName");
+document.getElementById("displayClass").innerText=selectedClass;
+
+generateQuestions();
+startTimer();
+}
+
+let questions=[];
+
+function generateQuestions(){
+questions=[...questionBank[selectedClass]];
+while(questions.length<20){
+questions.push(...questionBank[selectedClass]);
+}
+questions=questions.slice(0,20);
+
+createGrid();
+loadQuestion();
+}
+
+function createGrid(){
+const grid=document.getElementById("questionGrid");
+grid.innerHTML="";
+questions.forEach((_,i)=>{
+const btn=document.createElement("div");
+btn.className="grid-btn";
+btn.innerText=i+1;
+btn.onclick=()=>goToQuestion(i);
+grid.appendChild(btn);
+});
+}
+
+function goToQuestion(i){
+currentQuestion=i;
+loadQuestion();
+}
+
+function loadQuestion(){
+const q=questions[currentQuestion];
+document.getElementById("questionText").innerText=
+`Question ${currentQuestion+1}: ${q.q}`;
+
+const optionsDiv=document.getElementById("options");
+optionsDiv.innerHTML="";
+
+q.o.forEach((opt,index)=>{
+const div=document.createElement("div");
+div.className="option";
+div.innerText=opt;
+
+if(answers[currentQuestion]==index){
+div.classList.add("selected");
+}
+
+div.onclick=()=>{
+answers[currentQuestion]=index;
+updateGrid();
+updateCount();
+loadQuestion();
+};
+
+optionsDiv.appendChild(div);
+});
+
+updateGrid();
+updateCount();
+}
+
+function updateGrid(){
+document.querySelectorAll(".grid-btn").forEach((btn,i)=>{
+btn.classList.remove("answered","active");
+if(answers[i]!=undefined) btn.classList.add("answered");
+if(i===currentQuestion) btn.classList.add("active");
+});
+}
+
+function updateCount(){
+let answered=Object.keys(answers).length;
+document.getElementById("answeredCount").innerText=answered;
+document.getElementById("unansweredCount").innerText=20-answered;
+}
+
+function startTimer(){
+timer=setInterval(()=>{
+timeLeft--;
+let m=Math.floor(timeLeft/60);
+let s=timeLeft%60;
+document.getElementById("time").innerText=
+`${m}:${s<10?"0"+s:s}`;
+if(timeLeft<=0) submitExam();
+},1000);
+}
+
+function submitExam(){
+clearInterval(timer);
+let correct=0;
+questions.forEach((q,i)=>{
+if(answers[i]==q.a) correct++;
+});
+let percent=(correct/20)*100;
+
+document.getElementById("examPage").classList.add("hidden");
+document.getElementById("resultPage").classList.remove("hidden");
+
+let name=localStorage.getItem("studentName");
+
+if(percent>=50){
+document.getElementById("finalMessage").innerHTML=
+`Congratulations ${name}! 🎉 You passed the exam.`;
+document.getElementById("finalMessage").className="pass";
+}else{
+document.getElementById("finalMessage").innerHTML=
+`Sorry ${name}, you did not pass. Try again.`;
+document.getElementById("finalMessage").className="fail";
+}
+
+document.getElementById("scoreText").innerText=
+`You scored ${percent}% (${correct}/20). 
+Answered: ${Object.keys(answers).length}, 
+Unanswered: ${20-Object.keys(answers).length}`;
+}
+
+function logout(){
+localStorage.clear();
+location.reload();
+}
+</script>
+
+</body>
+</html>
